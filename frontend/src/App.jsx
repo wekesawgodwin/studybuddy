@@ -12,7 +12,9 @@ function App() {
     fetch(`${API}/health`)
       .then((res) => {
         if (!res.ok) throw new Error("Network response was not ok")
+            console.log(res.json());
         return res.json()
+    
       })
       .then((data) => {
         setMessage(data.message)
