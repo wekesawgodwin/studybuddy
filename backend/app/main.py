@@ -27,4 +27,4 @@ def health_check():
 
 @app.get("/hello")
 def hello_world():
-    return {"message": "Hello World"}
+    return {"message": "Hey Group 13!! We are live"}
