@@ -1,12 +1,15 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# CORS — allows the React frontend to call this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "frontend-production-184f5.up.railway.app",],  # Vite dev server
+    allow_origins=[
+        "http://localhost:5173",
+        "frontend-production-184f5.up.railway.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -18,4 +21,10 @@ def health_check():
 
 @app.get("/hello")
 def hello_world():
-    return {"message": "Hello Group 13!! We are Live"}
+    return {"message": "Hello World"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port)
