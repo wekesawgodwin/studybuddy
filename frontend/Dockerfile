@@ -7,7 +7,17 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
+# Cache bust — increment this number to force a fresh build
+ARG CACHEBUST=1
+
+
 RUN npm run build
+
+
 
 # ── Serve stage ──────────────────────────────────────────────────────────────
 FROM nginx:alpine AS production
@@ -19,3 +29,11 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
+
+
+
+
+
+
+
+
