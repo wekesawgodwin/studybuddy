@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react"
 
+const API = import.meta.env.VITE_API_URL;
+console.log(import.meta.env.VITE_API_URL);
+
 function App() {
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL}/hello`)
+    fetch(`${API}/health`)
       .then((res) => {
         if (!res.ok) throw new Error("Network response was not ok")
         return res.json()
