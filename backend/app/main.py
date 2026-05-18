@@ -1,6 +1,11 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"PORT environment variable is: {os.environ.get('PORT', 'NOT SET')}")
 
 app = FastAPI()
 
@@ -8,7 +13,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://frontend-production-184f5.up.railway.app",
+        "https://frontend-production-184f5.up.railway.app/",  # ← replace with your actual frontend URL
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -22,9 +27,3 @@ def health_check():
 @app.get("/hello")
 def hello_world():
     return {"message": "Hello World"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port)
