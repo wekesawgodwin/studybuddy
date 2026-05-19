@@ -1,5 +1,6 @@
 # backend/app/schemas/auth.py
 
+from uuid import UUID
 from pydantic import BaseModel, EmailStr
 
 """Schemas define the shape of request bodies and response payloads.
@@ -34,11 +35,13 @@ class TokenResponseSchema(BaseModel):
 
 
 class UserSchema(BaseModel):
+    
     """
-    Response body for GET /auth/me.
-    We expose only safe, non-sensitive fields.
+    We change id from str to UUID so Pydantic knows exactly what type
+    to expect from SQLAlchemy. Pydantic will then serialize it to a
+    string automatically when building the JSON response.
     """
-    id: str
+    id: UUID
     email: str
     is_active: bool
 

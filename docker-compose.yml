@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 services:
 
@@ -48,15 +48,32 @@ services:
     container_name: sb_backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      MONGO_URL: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB}?authSource=admin
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 60
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ENVIRONMENT: development
+          # Database
+          DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+          MONGO_URL: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB}?authSource=admin
+
+          # JWT
+          JWT_SECRET: ${JWT_SECRET}
+          JWT_ALGORITHM: ${JWT_ALGORITHM}
+          JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
+
+          # CORS
+          ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+
+          # Email — Gmail SMTP
+          MAIL_USERNAME: ${MAIL_USERNAME}
+          MAIL_PASSWORD: ${MAIL_PASSWORD}
+          MAIL_FROM: ${MAIL_FROM}
+          MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+          MAIL_SERVER: ${MAIL_SERVER}
+          MAIL_PORT: ${MAIL_PORT}
+          MAIL_STARTTLS: ${MAIL_STARTTLS}
+          MAIL_SSL_TLS: ${MAIL_SSL_TLS}
+
+          # Environment
+          ENVIRONMENT: ${ENVIRONMENT}
     volumes:
-      - ./backend/app:/app/app   # Hot reload in dev
+      - ./backend:/app   # Hot reload in dev
     ports:
       - "8000:8000"
     depends_on:

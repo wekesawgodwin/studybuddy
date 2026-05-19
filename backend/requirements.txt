@@ -12,6 +12,7 @@ python-jose[cryptography]==3.3.0
 
 # Password hashing — used to hash the OTP before storing it
 passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
 
 # Email sending
 fastapi-mail==1.4.1

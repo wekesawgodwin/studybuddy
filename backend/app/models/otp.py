@@ -45,4 +45,4 @@ class OTPCode(Base):
     is_used = Column(Boolean, default=False, nullable=False)
 
     # Audit timestamp
-    created_at = Column(DateTime, default=datetime.timezone.utc, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

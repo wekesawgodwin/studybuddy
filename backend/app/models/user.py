@@ -45,5 +45,5 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
 
     # Audit timestamps
-    created_at = Column(DateTime, default=datetime.timezone.utc, nullable=False)
-    updated_at = Column(DateTime, default=datetime.timezone.utc, onupdate=datetime.timezone.utc)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
