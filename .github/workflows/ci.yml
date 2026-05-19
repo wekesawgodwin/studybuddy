@@ -256,6 +256,10 @@ jobs:
       # ── Step 17 — Frontend lint ──────────────────────────────────────────────
       # Runs ESLint on the React source files.
       # Lint errors fail the build — no broken code merges to main.
+
+      - name: Install frontend dependencies
+        run: docker compose exec -T frontend npm install
+
       - name: Run frontend lint
         run: docker compose exec -T frontend npm run lint
 
