@@ -1,43 +1,55 @@
-import { useState, useEffect } from "react"
+// frontend/src/App.jsx
 
-function App() {
-  const [message, setMessage] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import LoginPage from "./pages/LoginPage";
+import OtpPage from "./pages/OtpPage";
 
-  useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL
-    console.log("1. API URL is:", apiUrl)
-
-    fetch(`${apiUrl}/hello`)
-      .then((res) => {
-        console.log("2. Response status:", res.status)
-        console.log("3. Response ok:", res.ok)
-        return res.json()
-      })
-      .then((data) => {
-        console.log("4. Data received:", data)
-        console.log("5. data.message is:", data.message)
-        setMessage(data.message)
-        setLoading(false)
-      })
-      .catch((err) => {
-        console.log("6. Error caught:", err)
-        setError(err.message)
-        setLoading(false)
-      })
-  }, [])
-
-  console.log("7. Current state — loading:", loading, "message:", message, "error:", error)
-
-  if (loading) return <p>Loading...</p>
-  if (error) return <p>Error: {error}</p>
-
+/**
+ * Temporary dashboard placeholder — replace with real DashboardPage in Sprint 2.
+ */
+function Dashboard() {
+  const { user, logout } = useAuth();
   return (
-    <div>
-      <h1>{message}</h1>
+    <div style={{ padding: 40 }}>
+      <h1>Welcome, {user?.email}</h1>
+      <button onClick={logout}>Log out</button>
     </div>
-  )
+  );
 }
 
-export default App
+// useAuth must be imported here too for the Dashboard placeholder
+import { useAuth } from "./context/AuthContext";
+
+export default function App() {
+  return (
+    /*
+     * AuthProvider must wrap BrowserRouter so that ProtectedRoute
+     * and all pages can access auth state via useAuth().
+     */
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes — accessible without a token */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/verify-otp" element={<OtpPage />} />
+
+          {/* Protected routes — redirect to /login if no token */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Default redirect */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}

@@ -1,3 +1,13 @@
+# .github/workflows/ci.yml
+#
+# StudyBuddy CI Pipeline
+#
+# Runs on every pull request targeting main.
+# Builds all Docker images, starts the full stack, runs migrations,
+# tests the auth endpoints, and lints the frontend.
+#
+# This pipeline must pass before any PR can be merged to main.
+
 name: CI
 
 on:
@@ -11,29 +21,265 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # ── Step 1 — Checkout ───────────────────────────────────────────────────
+      # Pulls the code from the PR branch onto the CI runner.
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Copy env file
-        run: cp .env.example .env
+      # ── Step 2 — Create .env ────────────────────────────────────────────────
+      # Creates the .env file the docker-compose.yml reads at runtime.
+      # We never commit .env to git — this step generates it from GitHub
+      # Secrets at CI runtime so the build has everything it needs.
+      #
+      # Database credentials here are CI-only throwaway values.
+      # They only exist inside the ephemeral CI runner and are destroyed
+      # when the job finishes.
+      #
+      # JWT_SECRET is a fixed CI value — it does not need to be secure
+      # because the CI database is never publicly accessible.
+      #
+      # Mail credentials come from GitHub Secrets so real Gmail App
+      # Passwords are never hardcoded in this file.
+      - name: Create .env from secrets
+        run: |
+          cat > .env << EOF
+          # ── PostgreSQL ───────────────────────────────────────────────────────
+          POSTGRES_USER=studybuddy
+          POSTGRES_PASSWORD=ci_password
+          POSTGRES_DB=studybuddy_db
 
+          # ── MongoDB ──────────────────────────────────────────────────────────
+          MONGO_USER=studybuddy
+          MONGO_PASSWORD=ci_password
+          MONGO_DB=studybuddy_content
+
+          # ── JWT ──────────────────────────────────────────────────────────────
+          JWT_SECRET=ci_test_jwt_secret_not_for_production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRE_MINUTES=60
+
+          # ── CORS ─────────────────────────────────────────────────────────────
+          ALLOWED_ORIGINS=http://localhost:5173
+
+          # ── Email — Gmail SMTP ───────────────────────────────────────────────
+          MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+          MAIL_FROM=${{ secrets.MAIL_FROM }}
+          MAIL_FROM_NAME=StudyBuddy CI
+          MAIL_SERVER=smtp.gmail.com
+          MAIL_PORT=587
+          MAIL_STARTTLS=True
+          MAIL_SSL_TLS=False
+
+          # ── Environment ──────────────────────────────────────────────────────
+          ENVIRONMENT=test
+          EOF
+
+      # ── Step 3 — Build Docker images ────────────────────────────────────────
+      # Builds all service images defined in docker-compose.yml.
+      # --no-cache ensures we always build from scratch in CI so a stale
+      # cached layer never causes a false passing build.
       - name: Build Docker images
-        run: docker compose build
+        run: docker compose build --no-cache
 
+      # ── Step 4 — Start all services ─────────────────────────────────────────
+      # Starts postgres, mongo, backend, and frontend in detached mode
+      # so the remaining steps can run against them.
       - name: Start services
         run: docker compose up -d
 
-      - name: Wait for services to be healthy
+      # ── Step 5 — Wait for PostgreSQL ────────────────────────────────────────
+      # Polls until PostgreSQL is ready to accept connections.
+      # The backend depends on this so we wait before checking the backend.
+      # Timeout after 60 seconds — if postgres isn't up by then, something
+      # is wrong with the image or the credentials.
+      - name: Wait for PostgreSQL to be healthy
+        run: |
+          echo "Waiting for PostgreSQL..."
+          timeout 60 bash -c \
+            'until docker compose exec -T postgres pg_isready -U studybuddy; \
+             do sleep 2; \
+             done'
+          echo "PostgreSQL is ready"
+
+      # ── Step 6 — Wait for MongoDB ───────────────────────────────────────────
+      # Polls until MongoDB responds to a ping command.
+      - name: Wait for MongoDB to be healthy
+        run: |
+          echo "Waiting for MongoDB..."
+          timeout 60 bash -c \
+            'until docker compose exec -T mongo \
+               mongosh --quiet --eval "db.runCommand(\"ping\").ok" | grep -q 1; \
+             do sleep 2; \
+             done'
+          echo "MongoDB is ready"
+
+      # ── Step 7 — Wait for backend ───────────────────────────────────────────
+      # Polls the /health endpoint until it returns 200.
+      # This confirms uvicorn started, connected to the databases,
+      # and is ready to handle requests.
+      # Timeout after 90 seconds to allow for a slow first cold start.
+      - name: Wait for backend to be healthy
         run: |
           echo "Waiting for backend..."
-          timeout 60 bash -c 'until curl -sf http://localhost:8000/health; do sleep 2; done'
+          timeout 90 bash -c \
+            'until curl -sf http://localhost:8000/health; \
+             do sleep 3; \
+             done'
+          echo "Backend is healthy"
 
-      - name: Run backend tests
-        run: docker compose exec -T backend pytest app/tests/ -v
+      # ── Step 8 — Run Alembic migrations ─────────────────────────────────────
+      # Applies all pending migrations to the CI PostgreSQL database.
+      # This mirrors what the Railway pre-deploy command does in production
+      # and confirms the migration files are valid and apply cleanly.
+      - name: Run database migrations
+        run: docker compose exec -T backend alembic upgrade head
+
+      # ── Step 9 — Verify migration tables exist ──────────────────────────────
+      # Queries PostgreSQL directly to confirm the expected tables were created
+      # by the migration. Fails the build if any table is missing.
+      - name: Verify auth tables exist
+        run: |
+          TABLES=$(docker compose exec -T postgres \
+            psql -U studybuddy -d studybuddy_db -t -c \
+            "SELECT tablename FROM pg_tables WHERE schemaname='public';")
+
+          echo "Tables found: $TABLES"
+
+          echo "$TABLES" | grep -q "users" \
+            && echo "✓ users table exists" \
+            || (echo "✗ users table missing" && exit 1)
+
+          echo "$TABLES" | grep -q "otp_codes" \
+            && echo "✓ otp_codes table exists" \
+            || (echo "✗ otp_codes table missing" && exit 1)
+
+      # ── Step 10 — Test: GET /health ─────────────────────────────────────────
+      # Confirms the health endpoint returns the expected JSON shape.
+      - name: "Test: GET /health returns 200"
+        run: |
+          RESPONSE=$(curl -sf http://localhost:8000/health)
+          echo "Response: $RESPONSE"
+          echo "$RESPONSE" | grep -q '"status":"ok"' \
+            && echo "✓ /health passed" \
+            || (echo "✗ /health failed" && exit 1)
+
+      # ── Step 11 — Test: POST /auth/request-otp ──────────────────────────────
+      # Confirms the endpoint accepts a valid email and returns 200.
+      # We do not verify the email is actually sent in CI — that would
+      # require a real Gmail account and could hit rate limits.
+      # We verify only that the endpoint responds correctly.
+      - name: "Test: POST /auth/request-otp returns 200"
+        run: |
+          RESPONSE=$(curl -sf -X POST http://localhost:8000/auth/request-otp \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-test@example.com"}')
+          echo "Response: $RESPONSE"
+          echo "$RESPONSE" | grep -q "message" \
+            && echo "✓ /auth/request-otp passed" \
+            || (echo "✗ /auth/request-otp failed" && exit 1)
+
+      # ── Step 12 — Test: POST /auth/request-otp rejects invalid email ─────────
+      # Confirms Pydantic validation rejects a malformed email address.
+      # FastAPI should return 422 Unprocessable Entity.
+      - name: "Test: POST /auth/request-otp rejects invalid email"
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:8000/auth/request-otp \
+            -H "Content-Type: application/json" \
+            -d '{"email":"not-an-email"}')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "422" ] \
+            && echo "✓ Invalid email correctly rejected with 422" \
+            || (echo "✗ Expected 422 but got $STATUS" && exit 1)
+
+      # ── Step 13 — Test: POST /auth/verify-otp rejects wrong code ────────────
+      # Confirms a wrong OTP returns 400 Bad Request.
+      # We first request an OTP (which creates a record in the DB),
+      # then submit the wrong code and expect a 400 back.
+      - name: "Test: POST /auth/verify-otp rejects wrong OTP"
+        run: |
+          # Request an OTP first so a record exists in the database
+          curl -sf -X POST http://localhost:8000/auth/request-otp \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-otp-test@example.com"}' > /dev/null
+
+          # Submit the wrong code — should return 400
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:8000/auth/verify-otp \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci-otp-test@example.com","otp":"000000"}')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "400" ] \
+            && echo "✓ Wrong OTP correctly rejected with 400" \
+            || (echo "✗ Expected 400 but got $STATUS" && exit 1)
+
+      # ── Step 14 — Test: POST /auth/verify-otp rejects expired OTP ───────────
+      # Confirms that submitting an OTP for an email that never requested
+      # one also returns 400 — no record exists so it should fail cleanly.
+      - name: "Test: POST /auth/verify-otp rejects OTP for unknown email"
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:8000/auth/verify-otp \
+            -H "Content-Type: application/json" \
+            -d '{"email":"never-requested@example.com","otp":"123456"}')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "400" ] \
+            && echo "✓ Unknown email OTP correctly rejected with 400" \
+            || (echo "✗ Expected 400 but got $STATUS" && exit 1)
+
+      # ── Step 15 — Test: GET /auth/me rejects missing token ──────────────────
+      # Confirms that hitting a protected endpoint without a token
+      # returns 403 Forbidden (HTTPBearer returns 403 when no header present).
+      - name: "Test: GET /auth/me without token returns 403"
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://localhost:8000/auth/me)
+          echo "Status: $STATUS"
+          [ "$STATUS" = "403" ] \
+            && echo "✓ /auth/me correctly rejected unauthenticated request with 403" \
+            || (echo "✗ Expected 403 but got $STATUS" && exit 1)
+
+      # ── Step 16 — Test: GET /auth/me rejects invalid token ──────────────────
+      # Confirms that a tampered or random JWT returns 401 Unauthorized.
+      - name: "Test: GET /auth/me with invalid token returns 401"
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer this.is.not.a.valid.jwt" \
+            http://localhost:8000/auth/me)
+          echo "Status: $STATUS"
+          [ "$STATUS" = "401" ] \
+            && echo "✓ /auth/me correctly rejected invalid token with 401" \
+            || (echo "✗ Expected 401 but got $STATUS" && exit 1)
+
+      # ── Step 17 — Frontend lint ──────────────────────────────────────────────
+      # Runs ESLint on the React source files.
+      # Lint errors fail the build — no broken code merges to main.
+
+      - name: Install frontend dependencies
+        run: docker compose exec -T frontend npm install
 
       - name: Run frontend lint
         run: docker compose exec -T frontend npm run lint
 
+      # ── Step 18 — Print service logs on failure ──────────────────────────────
+      # If any previous step failed, print the backend and frontend logs
+      # so the developer can see exactly what went wrong without having
+      # to re-run the pipeline locally.
+      # `if: failure()` means this step only runs when something above failed.
+      - name: Print backend logs on failure
+        if: failure()
+        run: docker compose logs backend
+
+      - name: Print frontend logs on failure
+        if: failure()
+        run: docker compose logs frontend
+
+      # ── Step 19 — Tear down ──────────────────────────────────────────────────
+      # Stops and removes all containers and volumes.
+      # `if: always()` means this runs even if earlier steps failed,
+      # so the CI runner is always left in a clean state.
       - name: Tear down
         if: always()
         run: docker compose down -v
