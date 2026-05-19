@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, EmailStr
 
+"""Schemas define the shape of request bodies and response payloads.
+FastAPI uses them for automatic validation and serialisation."""
 
 class RequestOTPSchema(BaseModel):
     """
