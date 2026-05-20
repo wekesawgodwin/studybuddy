@@ -16,6 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY ./app ./app
 
+# These are required for the pre-deploy command: alembic upgrade head
+# Without these two lines the built image has no knowledge of the
+# database schema and the migration command fails with "No config file found"
+COPY alembic.ini .
+COPY ./alembic ./alembic
+
 # ── Runtime ──────────────────────────────────────────────────────────────────
 EXPOSE 8000
 
