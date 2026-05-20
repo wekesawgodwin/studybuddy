@@ -31,3 +31,11 @@ app.include_router(auth.router)
 @app.get("/health", tags=["health"])
 def health_check():
     return {"status": "ok"}
+
+@app.get("/debug-mail", tags=["debug"])
+def debug_mail():
+    import os
+    return {
+        "RESEND_API_KEY_SET": "YES" if os.environ.get("RESEND_API_KEY") else "NO",
+        "MAIL_FROM": os.environ.get("MAIL_FROM", "NOT SET"),
+    }
