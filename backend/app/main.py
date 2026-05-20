@@ -14,10 +14,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-allowed_origins_raw = os.environ.get(
-    "ALLOWED_ORIGINS",
-    "http://localhost:5173"
-)
+allowed_origins_raw = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173")
 allowed_origins = [origin.strip() for origin in allowed_origins_raw.split(",")]
 
 app.add_middleware(
