@@ -2,6 +2,7 @@
 
 from uuid import UUID
 from pydantic import BaseModel, EmailStr
+from app.models.user import UserRole 
 
 """Schemas define the shape of request bodies and response payloads.
 FastAPI uses them for automatic validation and serialisation."""
@@ -43,6 +44,7 @@ class UserSchema(BaseModel):
     """
     id: UUID
     email: str
+    role: UserRole
     is_active: bool
 
     # This tells Pydantic to read data from SQLAlchemy model attributes,

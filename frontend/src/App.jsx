@@ -6,6 +6,18 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import OtpPage from "./pages/OtpPage";
 
+import TopicPage from "./pages/TopicPage";
+
+// Add inside Routes:
+<Route
+  path="/topics/:topicId"
+  element={
+    <ProtectedRoute>
+      <TopicPage />
+    </ProtectedRoute>
+  }
+/>
+
 /**
  * Temporary dashboard placeholder — replace with real DashboardPage in Sprint 2.
  */

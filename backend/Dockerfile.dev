@@ -9,5 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# These are required for the pre-deploy command: alembic upgrade head
+# Without these two lines the built image has no knowledge of the
+# database schema and the migration command fails with "No config file found"
+COPY alembic.ini .
+COPY ./alembic ./alembic
+
 # Dev: hot reload is handled by the compose override
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

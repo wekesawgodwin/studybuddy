@@ -3,6 +3,9 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import auth
+from app.api import admin 
+from app.api.courses import router as courses_router
+from app.api.courses import topics_router 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,7 +29,9 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-
+app.include_router(courses_router)
+app.include_router(topics_router)  
+app.include_router(admin.router)
 
 @app.get("/health", tags=["health"])
 def health_check():

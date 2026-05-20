@@ -1,49 +1,55 @@
-# backend/app/models/user.py
-
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.db.session import Base
+import enum
+
+
+class UserRole(str, enum.Enum):
+    """
+    Inheriting from str means the enum value is used directly
+    when the object is converted to a string.
+    e.g. str(UserRole.SUPER_ADMIN) == "super_admin"
+    """
+    SUPER_ADMIN = "super_admin"
+    ADMIN = "admin"
+    STUDENT = "student"
 
 
 class User(Base):
-    """
-    Stores identity and authentication metadata.
-
-    We do NOT store a password. Authentication is entirely OTP-based.
-    auth_provider identifies how the user authenticates ("email_otp").
-    auth_subject_id is the unique identifier from the provider — for
-    email OTP this is simply the user's email address.
-    """
     __tablename__ = "users"
 
-    # Primary key — UUID is preferred over integer for security
-    # (sequential IDs allow enumeration attacks)
-    id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-        nullable=False
-    )
-
-    # The authentication method used — always "email_otp" in this system
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     auth_provider = Column(String(50), nullable=False, default="email_otp")
-
-    # The unique identifier from the provider.
-    # For email OTP this is the email address itself.
-    # unique=True enforces one account per email.
     auth_subject_id = Column(String(255), unique=True, nullable=False)
-
-    # The user's email address — stored separately from auth_subject_id
-    # so the schema supports future providers (e.g. Google SSO) where
-    # auth_subject_id would be a Google user ID, not an email.
     email = Column(String(255), unique=True, nullable=False)
 
-    # Soft delete / account suspension flag.
-    # Set to False to disable a user without deleting their data.
-    is_active = Column(Boolean, default=True, nullable=False)
+    # values_callable tells SQLAlchemy to use the .value of each enum
+    # member ("super_admin") instead of the .name ("SUPER_ADMIN").
+    # Without this SQLAlchemy sends the uppercase name to PostgreSQL
+    # which does not match the lowercase enum type in the database.
+    role = Column(
+        SQLEnum(
+            UserRole,
+            name="user_role",
+            values_callable=lambda x: [e.value for e in x]
+        ),
+        nullable=False,
+        default=UserRole.STUDENT
+    )
 
-    # Audit timestamps
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    permissions = relationship(
+        "AdminPermission",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )

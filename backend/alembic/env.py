@@ -12,6 +12,10 @@ from alembic import context
 from app.db.session import Base
 from app.models.user import User       # noqa: F401 — import needed for autogenerate
 from app.models.otp import OTPCode     # noqa: F401 — import needed for autogenerate
+# backend/alembic/env.py — update imports block
+
+from app.models.course import Course, Module, SubModule, Topic
+from app.models.role import AdminPermission           # noqa: F401 ← ADD
 
 # Alembic Config object — provides access to values in alembic.ini
 config = context.config
