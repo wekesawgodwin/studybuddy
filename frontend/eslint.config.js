@@ -1,9 +1,3 @@
-import js from "@eslint/js";
-import reactPlugin from "eslint-plugin-react";
-import reactHooks from "eslint-plugin-react-hooks";
-
-// frontend/eslint.config.js
-
 export default [
   {
     files: ["src/**/*.{js,jsx}"],
